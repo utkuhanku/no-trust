@@ -10,7 +10,7 @@ const MOCK_REWARDS = [
         id: '1',
         title: 'ETHDenver Top 50 Finisher',
         provider: 'Word Rain',
-        reward: 'Multi-Tier', // Indicates varied rewards
+        reward: 'Multi-Tier',
         pool: '$250 USDC',
         tiers: [
             { rank: '1', amount: '$100 USDC' },
@@ -23,7 +23,11 @@ const MOCK_REWARDS = [
         color: 'from-blue-500/20 to-indigo-500/20',
         logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
         icon: '☔️',
-        verificationType: 'On-Chain Event'
+        verificationType: 'On-Chain Event',
+        contractAddress: '0x8b36c1d19D4a...eB48',
+        currentClaims: 12,
+        maxCap: 50,
+        timeLeft: '2 Days'
     },
     {
         id: '2',
@@ -34,9 +38,13 @@ const MOCK_REWARDS = [
         action: 'On-Chain Snapshot',
         tags: ['Airdrop', 'Holder'],
         color: 'from-blue-600/20 to-cyan-500/20',
-        logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/logo.png', // ETH
+        logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/logo.png',
         icon: '💎',
-        verificationType: 'Contract State (ERC20)'
+        verificationType: 'Contract State (ERC20)',
+        contractAddress: '0xC02aaA39b22...6Cc2',
+        currentClaims: 184,
+        maxCap: 200,
+        timeLeft: '12 Hours'
     },
     {
         id: '3',
@@ -47,9 +55,13 @@ const MOCK_REWARDS = [
         action: 'Like & Recast Ann.',
         tags: ['Social', 'API'],
         color: 'from-purple-500/20 to-pink-500/20',
-        logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/assets/0x4ed4E8628A5EBdD83296c00F0904fFBF3A0108A7/logo.png', // DEGEN 
+        logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/assets/0x4ed4E8628A5EBdD83296c00F0904fFBF3A0108A7/logo.png',
         icon: '🎩',
-        verificationType: 'API (Neynar)'
+        verificationType: 'API (Neynar)',
+        contractAddress: 'N/A (API Verification)',
+        currentClaims: 8,
+        maxCap: 100,
+        timeLeft: '5 Days'
     }
 ];
 
@@ -106,8 +118,19 @@ export function HunterDashboard() {
                             </span>
                         ))}
                         <span className="bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white border border-white/5 rounded-full flex items-center gap-1 backdrop-blur-md">
-                            <Clock className="w-3 h-3" /> 2D
+                            <Clock className="w-3 h-3" /> {reward.timeLeft}
                         </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-5">
+                        <div className="flex justify-between items-end mb-1.5">
+                            <span className="text-xs font-semibold text-white/80">Campaign Capacity</span>
+                            <span className="text-xs font-bold text-white">{reward.currentClaims} / {reward.maxCap} <span className="text-white/50 font-medium">Claimed</span></span>
+                        </div>
+                        <div className="w-full bg-black/40 rounded-full h-1.5 border border-white/10 overflow-hidden">
+                            <div className="bg-white h-1.5 rounded-full" style={{ width: `${(reward.currentClaims / reward.maxCap) * 100}%` }}></div>
+                        </div>
                     </div>
                 </div>
 
@@ -126,9 +149,15 @@ export function HunterDashboard() {
                                 <div className="w-7 h-7 bg-black border border-white/10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5 shadow-md">1</div>
                                 <div>
                                     <h5 className="text-sm font-medium text-white mb-0.5">Interact with {reward.provider}</h5>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-gray-500 mb-2">
                                         {reward.verificationType.includes('API') ? 'Complete the action via their app or social platform.' : 'Perform the required action directly on the blockchain.'}
                                     </p>
+                                    {!reward.verificationType.includes('API') && (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-black/40 border border-white/5 rounded-md hover:bg-black/60 cursor-pointer transition-colors group">
+                                            <span className="text-[10px] text-gray-500 font-mono">{reward.contractAddress}</span>
+                                            <ExternalLink className="w-3 h-3 text-gray-500 group-hover:text-indigo-400 transition-colors" />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
