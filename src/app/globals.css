@@ -106,3 +106,13 @@ body::before {
   z-index: 50;
   mix-blend-mode: overlay;
 }
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}

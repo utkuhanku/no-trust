@@ -69,17 +69,47 @@ export function HunterDashboard() {
     const [selectedReward, setSelectedReward] = useState<string | null>(null);
     const [claimState, setClaimState] = useState<'idle' | 'verifying' | 'claiming' | 'success'>('idle');
 
+    // AHA Moment: Trustless Verification Log States
+    const [verificationSteps, setVerificationSteps] = useState<{ id: string, text: string, status: 'pending' | 'active' | 'done' }[]>([
+        { id: 'rpc', text: 'Connecting to Base RPC...', status: 'pending' },
+        { id: 'query', text: 'Querying Target Contract State...', status: 'pending' },
+        { id: 'validate', text: 'Validating Condition (Zero-Integration)...', status: 'pending' },
+        { id: 'zk', text: 'Generating Proof-of-Action...', status: 'pending' },
+        { id: 'extract', text: 'Initiating Yield Extraction...', status: 'pending' }
+    ]);
+
     const handleProceed = () => {
         setClaimState('verifying');
-        // Simulate objective verification
+
+        // Reset steps
+        setVerificationSteps(steps => steps.map(s => ({ ...s, status: 'pending' })));
+
+        // Step 1: RPC
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'rpc' ? { ...s, status: 'active' } : s)), 100);
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'rpc' ? { ...s, status: 'done' } : s)), 600);
+
+        // Step 2: Query
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'query' ? { ...s, status: 'active' } : s)), 600);
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'query' ? { ...s, status: 'done' } : s)), 1400);
+
+        // Step 3: Validate
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'validate' ? { ...s, status: 'active' } : s)), 1400);
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'validate' ? { ...s, status: 'done' } : s)), 2800);
+
+        // Step 4: ZK Proof
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'zk' ? { ...s, status: 'active' } : s)), 2800);
         setTimeout(() => {
+            setVerificationSteps(steps => steps.map(s => s.id === 'zk' ? { ...s, status: 'done' } : s));
             setClaimState('claiming');
-            // Simulate extraction yield transaction
-            setTimeout(() => {
-                setClaimState('success');
-                toast.success('Yield Successfully Extracted!', { duration: 4000 });
-            }, 2500);
-        }, 2000);
+        }, 3600);
+
+        // Step 5: Extract
+        setTimeout(() => setVerificationSteps(steps => steps.map(s => s.id === 'extract' ? { ...s, status: 'active' } : s)), 3600);
+        setTimeout(() => {
+            setVerificationSteps(steps => steps.map(s => s.id === 'extract' ? { ...s, status: 'done' } : s));
+            setClaimState('success');
+            toast.success('Yield Secured on Base!', { duration: 5000 });
+        }, 5000);
     };
 
     if (selectedReward) {
@@ -195,9 +225,35 @@ export function HunterDashboard() {
                     </div>
                 </div>
 
-                <div className="pt-4">
+                <div className="pt-2">
+                    {/* AHA Moment: Expanding Verification Log */}
+                    {claimState !== 'idle' && (
+                        <div className="mb-4 bg-[#0F1015]/80 backdrop-blur-md border border-white/10 rounded-2xl p-4 animate-in slide-in-from-top-4 duration-500 overflow-hidden relative">
+                            <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+                            <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <Box className="w-4 h-4 text-indigo-400" /> Trustless Verification Log
+                            </h5>
+
+                            <div className="space-y-2.5 relative z-10">
+                                {verificationSteps.map((step, idx) => (
+                                    <div key={step.id} className={cn(
+                                        "flex items-center gap-3 text-sm font-mono transition-all duration-300",
+                                        step.status === 'pending' ? "opacity-30" :
+                                            step.status === 'active' ? "opacity-100 text-indigo-300 translate-x-1" :
+                                                "opacity-100 text-green-400"
+                                    )}>
+                                        {step.status === 'pending' && <div className="w-1.5 h-1.5 rounded-full bg-white/30" />}
+                                        {step.status === 'active' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />}
+                                        {step.status === 'done' && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
+                                        <span className={cn(step.status === 'done' && "line-through opacity-70")}>{step.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {claimState === 'success' ? (
-                        <button className="w-full bg-green-500/20 text-green-400 font-bold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 border border-green-500/30 transition-all pointer-events-none">
+                        <button className="w-full bg-green-500/20 text-green-400 font-bold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 border border-green-500/30 transition-all pointer-events-none animate-in zoom-in-95 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
                             <CheckCircle className="w-5 h-5" /> Secured on Base
                         </button>
                     ) : (
@@ -205,12 +261,20 @@ export function HunterDashboard() {
                             onClick={handleProceed}
                             disabled={claimState !== 'idle'}
                             className={cn(
-                                "w-full font-bold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)]",
-                                claimState === 'idle' ? "bg-indigo-600 hover:bg-indigo-500 text-white" : "bg-indigo-600/50 text-white cursor-not-allowed"
+                                "w-full font-bold text-lg py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] relative overflow-hidden group",
+                                claimState === 'idle' ? "bg-indigo-600 hover:bg-indigo-500 text-white" : "bg-[#1A1B23] text-gray-400 border border-white/5 cursor-not-allowed"
                             )}>
-                            {claimState === 'idle' && <><ExternalLink className="w-5 h-5" /> Execute & Claim Objective</>}
-                            {claimState === 'verifying' && <><div className="w-5 h-5 animate-spin border-2 border-white/20 border-t-white rounded-full" /> Verifying Logic...</>}
-                            {claimState === 'claiming' && <><div className="w-5 h-5 animate-spin border-2 border-white/20 border-t-white rounded-full" /> Extracting Yield...</>}
+                            {claimState === 'idle' && (
+                                <>
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-[100%] group-hover:animate-[shimmer_2s_infinite]" />
+                                    <ExternalLink className="w-5 h-5" /> Execute & Claim Objective
+                                </>
+                            )}
+                            {(claimState === 'verifying' || claimState === 'claiming') && (
+                                <>
+                                    <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse" /> Establishing Cryptographic Proof...
+                                </>
+                            )}
                         </button>
                     )}
                 </div>

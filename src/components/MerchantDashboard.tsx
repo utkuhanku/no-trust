@@ -11,6 +11,11 @@ export function MerchantDashboard() {
     const [isDeploying, setIsDeploying] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
 
+    // Aha Moment: Simulation States
+    const [testWallet, setTestWallet] = useState('');
+    const [simResult, setSimResult] = useState<'idle' | 'simulating' | 'success' | 'failed'>('idle');
+    const [simLogs, setSimLogs] = useState<string[]>([]);
+
     const handleDeploy = () => {
         setIsDeploying(true);
         setTimeout(() => {
@@ -22,6 +27,33 @@ export function MerchantDashboard() {
                 setAmount('');
             }, 3000);
         }, 2500);
+    };
+
+    const handleSimulate = () => {
+        if (!testWallet) return;
+        setSimResult('simulating');
+        setSimLogs(['[RPC] Connecting to Base Mainnet...']);
+
+        setTimeout(() => {
+            setSimLogs(prev => [...prev, `[RPC] Fetching state for ${testWallet.slice(0, 6)}...`]);
+        }, 600);
+
+        setTimeout(() => {
+            setSimLogs(prev => [...prev, '[Index] Evaluating Rule Condition against target...']);
+        }, 1200);
+
+        setTimeout(() => {
+            if (metricType === 'streak') {
+                setSimLogs(prev => [...prev, '[Index] Read: StreakUpdated(12) >= 10. SUCCESS.']);
+                setSimResult('success');
+            } else if (metricType === 'nft') {
+                setSimLogs(prev => [...prev, '[Index] Read: Balance 0 == 1. FAILED.']);
+                setSimResult('failed');
+            } else {
+                setSimLogs(prev => [...prev, '[Index] Read: Balance 1450 >= 1000. SUCCESS.']);
+                setSimResult('success');
+            }
+        }, 2200);
     };
 
     const [metricType, setMetricType] = useState('streak');
@@ -151,6 +183,60 @@ export function MerchantDashboard() {
                     <div className="flex items-center gap-2 bg-black/40 border border-white/5 p-1 rounded-xl">
                         {renderConditionInput()}
                     </div>
+                </div>
+
+                {/* Validation Logic Pipe */}
+                <div className="pl-8 flex flex-col gap-1 -my-1">
+                    <div className="w-0.5 h-3 bg-white/10" />
+                </div>
+
+                {/* 4. Aha Moment -> Simulation Box */}
+                <div className={cn(
+                    "w-full border p-3 rounded-[16px] flex flex-col gap-2 transition-all duration-500 relative overflow-hidden",
+                    simResult === 'success' ? "bg-green-500/10 border-green-500/30" :
+                        simResult === 'failed' ? "bg-red-500/10 border-red-500/30" :
+                            simResult === 'simulating' ? "bg-indigo-500/10 border-indigo-500/30" :
+                                "bg-[#1A1B23] border-white/5"
+                )}>
+                    {simResult === 'success' && <div className="absolute top-0 left-0 w-full h-full bg-green-500/5 animate-pulse mix-blend-overlay pointer-events-none" />}
+                    {simResult === 'simulating' && <div className="absolute top-0 left-0 w-full h-full bg-indigo-500/5 animate-pulse mix-blend-overlay pointer-events-none" />}
+
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1 z-10">
+                        <Sparkles className="w-3 h-3 text-indigo-400" /> Live Simulation Preview
+                    </span>
+
+                    <div className="relative flex items-center z-10">
+                        <input
+                            type="text"
+                            value={testWallet}
+                            onChange={(e) => setTestWallet(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 p-2.5 rounded-xl text-sm font-mono text-gray-300 outline-none focus:border-indigo-500/50 transition-colors"
+                            placeholder="Enter Wallet Address (0x...)"
+                        />
+                        <button
+                            onClick={handleSimulate}
+                            disabled={simResult === 'simulating' || !testWallet}
+                            className="absolute right-2 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-bold cursor-pointer transition-colors shadow-[0_0_10px_rgba(79,70,229,0.3)] disabled:opacity-50"
+                        >
+                            {simResult === 'simulating' ? 'Running...' : 'Test Rule'}
+                        </button>
+                    </div>
+
+                    {/* Simulation Logs */}
+                    {simLogs.length > 0 && (
+                        <div className="mt-2 bg-black/60 border border-white/5 rounded-lg p-2.5 flex flex-col gap-1 font-mono text-[10px] z-10">
+                            {simLogs.map((log, i) => (
+                                <div key={i} className={cn(
+                                    "flex items-center gap-1.5 animate-in fade-in slide-in-from-left-2",
+                                    log.includes('SUCCESS') ? "text-green-400" :
+                                        log.includes('FAILED') ? "text-red-400" :
+                                            "text-indigo-300"
+                                )}>
+                                    <span className="opacity-50">&gt;</span> {log}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
