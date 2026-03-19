@@ -1,35 +1,55 @@
 'use client';
 
-import { Navbar } from '@/components/Navbar';
-import { RewardWidget } from '@/components/RewardWidget';
+import { useState } from 'react';
+import { DiscoverView } from '@/components/DiscoverView';
+import { CampaignDetail } from '@/components/CampaignDetail';
+import { DistributeWizard } from '@/components/DistributeWizard';
+import { MyActivityView } from '@/components/MyActivityView';
+import { useView } from '@/context/ViewContext';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function Home() {
+  const { activeView } = useView();
+  const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
+
+  const renderView = () => {
+    switch (activeView) {
+      case 'discover':
+        return <DiscoverView onCampaignSelect={setSelectedCampaignId} />;
+      case 'distribute':
+        return <DistributeWizard />;
+      case 'activity':
+        return <MyActivityView />;
+      default:
+        return <DiscoverView onCampaignSelect={setSelectedCampaignId} />;
+    }
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#030303] overflow-hidden relative text-[#EBEBEB] font-sans">
-      <Navbar />
+    <div className="relative min-h-[calc(100vh-8rem)]">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeView}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.3 }}
+        >
+          {renderView()}
+        </motion.div>
+      </AnimatePresence>
 
-      <main className="flex-grow flex flex-col items-center w-full relative z-10 px-4">
+      <AnimatePresence>
+        {selectedCampaignId && (
+          <CampaignDetail 
+            campaignId={selectedCampaignId} 
+            onClose={() => setSelectedCampaignId(null)} 
+          />
+        )}
+      </AnimatePresence>
 
-        {/* Hero Text */}
-        <div className="text-center mt-8 md:mt-12 z-20 animate-in fade-in duration-700">
-          <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-1.5 rounded-full mb-6">
-            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-[11px] font-bold tracking-[0.2em] text-gray-300 uppercase">No-Trust Campaigns</span>
-          </div>
-
-          <h1 className="text-4xl md:text-6xl tracking-tight leading-[1.1] font-medium mb-4 text-white max-w-2xl mx-auto">
-            Verify actions. <br className="hidden md:block" />
-            <span className="text-gray-500">Distribute rewards instantly.</span>
-          </h1>
-        </div>
-
-        {/* The Core Widget */}
-        <RewardWidget />
-
-      </main>
-
-      {/* Extreme ambient lighting for "Void" aesthetics */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none opacity-50 z-0 mix-blend-screen" />
+      {/* Ambient background glow */}
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none -z-10 mix-blend-screen opacity-50" />
     </div>
   );
 }
