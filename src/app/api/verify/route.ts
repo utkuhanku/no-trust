@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse, NextRequest } from 'next/server';
 import { Wallet, JsonRpcProvider, solidityPackedKeccak256, Contract } from 'ethers';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
