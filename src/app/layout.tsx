@@ -4,7 +4,6 @@ import { Toaster } from 'sonner';
 import './globals.css';
 import '@coinbase/onchainkit/styles.css';
 import { Providers } from '@/Providers';
-import { MainLayout } from '@/components/MainLayout';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -40,9 +39,7 @@ export default function RootLayout({
       >
         <div className={inter.className}>
           <Providers>
-            <MainLayout>
-              {children}
-            </MainLayout>
+            {children}
             <Toaster theme="dark" position="bottom-right" toastOptions={{ style: { background: '#0A0A0B', border: '1px solid rgba(255,255,255,0.1)', color: 'white' } }} />
           </Providers>
         </div>

@@ -2,214 +2,296 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Clock, ExternalLink, CheckCircle, ArrowRight, ShieldCheck, Database, Box } from 'lucide-react';
+import { X, Clock, ExternalLink, CheckCircle, Database, Box, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAccount } from 'wagmi';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
+import { Campaign } from '@/app/api/campaigns/route';
+import { VerifyResponse } from '@/app/api/verify/route';
+import { NOTRUST_ABI, NOTRUST_ADDRESS } from '@/lib/contract';
 
 interface CampaignDetailProps {
-    campaignId: number | null;
-    onClose: () => void;
+    campaign: Campaign;
+    onBack: () => void;
 }
 
-export function CampaignDetail({ campaignId, onClose }: CampaignDetailProps) {
+interface Step {
+    id: string;
+    text: string;
+    status: 'pending' | 'active' | 'done';
+    value?: string;
+}
+
+export function CampaignDetail({ campaign, onBack }: CampaignDetailProps) {
     const { address, isConnected } = useAccount();
-    const [campaign, setCampaign] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [verifying, setVerifying] = useState(false);
+    const publicClient = usePublicClient();
+    const { writeContractAsync } = useWriteContract();
+
+    const [timeLeft, setTimeLeft] = useState('');
+    const [eligibilityChecked, setEligibilityChecked] = useState(false);
     const [claimState, setClaimState] = useState<'idle' | 'verifying' | 'claiming' | 'success'>('idle');
-    const [steps, setSteps] = useState<{ id: string, text: string, status: 'pending' | 'active' | 'done', value?: string }[]>([
+    const [claimTx, setClaimTx] = useState('');
+    const [alreadyClaimed, setAlreadyClaimed] = useState(false);
+
+    const [steps, setSteps] = useState<Step[]>([
         { id: 'rpc', text: 'Connecting to Base RPC', status: 'pending' },
-        { id: 'state', text: 'Reading contract state', status: 'pending' },
-        { id: 'criteria', text: 'Criteria verified trustlessly', status: 'pending' },
-        { id: 'sign', text: 'Backend signed your proof', status: 'pending' },
-        { id: 'submit', text: 'Submitting claim to contract', status: 'pending' }
+        { id: 'state', text: `Reading on-chain state for 0x...`, status: 'pending' },
+        { id: 'criteria', text: 'Criteria verified', status: 'pending' },
+        { id: 'sign', text: 'Proof signed by verifier', status: 'pending' },
+        { id: 'submit', text: 'claim() submitted on Base', status: 'pending' }
     ]);
 
     useEffect(() => {
-        if (!campaignId) return;
-
-        const fetchDetail = async () => {
-            setLoading(true);
-            try {
-                const res = await fetch(`/api/campaigns`); // In a real app, /api/campaigns/[id]
-                const data = await res.json();
-                const found = data.find((c: any) => c.id === campaignId);
-                setCampaign(found);
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
+        if (!campaign.ends_at) return;
+        const tick = () => {
+            const diff = new Date(campaign.ends_at).getTime() - Date.now();
+            if (diff <= 0) {
+                setTimeLeft('Ended');
+            } else {
+                const h = Math.floor(diff / (1000 * 60 * 60));
+                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((diff % (1000 * 60)) / 1000);
+                setTimeLeft(`${h}h ${m}m ${s}s`);
             }
         };
+        tick();
+        const int = setInterval(tick, 1000);
+        return () => clearInterval(int);
+    }, [campaign.ends_at]);
 
-        fetchDetail();
-    }, [campaignId]);
+    useEffect(() => {
+        const checkAlreadyClaimed = async () => {
+            if (!address || !publicClient || !campaign.on_chain_id) return;
+            try {
+                const claimed = await publicClient.readContract({
+                    address: NOTRUST_ADDRESS,
+                    abi: NOTRUST_ABI,
+                    functionName: 'hasClaimed',
+                    args: [BigInt(campaign.on_chain_id), address as `0x${string}`]
+                });
+                setAlreadyClaimed(claimed as boolean);
+            } catch (err) {}
+        };
+        checkAlreadyClaimed();
+    }, [address, publicClient, campaign.on_chain_id]);
+
+    const updateStep = (id: string, status: 'pending' | 'active' | 'done', value?: string) => {
+        setSteps(prev => prev.map(s => s.id === id ? { ...s, status, value: value || s.value } : s));
+    };
 
     const handleCheckEligibility = async () => {
-        if (!isConnected) {
-            toast.error('Please connect your wallet first');
+        if (!isConnected || !address) {
+            toast.error('Connect wallet to check');
             return;
         }
 
+        updateStep('state', 'pending', `Reading on-chain state for ${address.slice(0,6)}...${address.slice(-4)}`);
+        
+        try {
+            const res = await fetch('/api/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaignId: campaign.on_chain_id, userAddress: address, checkOnly: true })
+            });
+
+            const data = await res.json();
+            
+            if (res.ok) {
+                toast.success('You qualify — ready to claim');
+                setEligibilityChecked(true);
+            } else {
+                toast.error(`You need ${data.diff || 'more'} ${campaign.token_symbol}`);
+            }
+        } catch (err) {
+            toast.error('Failed to check eligibility');
+        }
+    };
+
+    const handleClaim = async () => {
+        if (!isConnected || !address) return;
         setClaimState('verifying');
         setSteps(s => s.map(step => ({ ...step, status: 'pending' })));
 
-        // Step-by-step simulation (as requested)
-        const updateStep = (id: string, status: 'active' | 'done', value?: string) => {
-            setSteps(prev => prev.map(s => s.id === id ? { ...s, status, value } : s));
-        };
+        try {
+            updateStep('rpc', 'active');
+            await new Promise(r => setTimeout(r, 600));
+            updateStep('rpc', 'done');
 
-        // Step 1
-        updateStep('rpc', 'active');
-        await new Promise(r => setTimeout(r, 800));
-        updateStep('rpc', 'done');
+            updateStep('state', 'active');
+            const res = await fetch('/api/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaignId: campaign.on_chain_id, userAddress: address })
+            });
+            const data: VerifyResponse = await res.json();
+            
+            if (!res.ok || !data.signature) {
+                throw new Error(data.error || 'Verification failed');
+            }
 
-        // Step 2
-        updateStep('state', 'active');
-        await new Promise(r => setTimeout(r, 1200));
-        updateStep('state', 'done', `0x${address?.slice(2, 6)}...${address?.slice(-4)}`);
+            updateStep('state', 'done', `${data.value} found`);
+            
+            updateStep('criteria', 'active');
+            await new Promise(r => setTimeout(r, 400));
+            updateStep('criteria', 'done', `${data.value} ≥ ${campaign.criteria_value} ✓`);
 
-        // Step 3
-        updateStep('criteria', 'active');
-        await new Promise(r => setTimeout(r, 1500));
-        updateStep('criteria', 'done', 'VERIFIED ✓');
+            setClaimState('claiming');
+            updateStep('sign', 'active');
+            await new Promise(r => setTimeout(r, 400));
+            updateStep('sign', 'done', 'EIP-191 sig received');
 
-        // Step 4
-        setClaimState('claiming');
-        updateStep('sign', 'active');
-        await new Promise(r => setTimeout(r, 1000));
-        updateStep('sign', 'done', 'EIP-191 SIGNED');
+            updateStep('submit', 'active');
+            
+            const txHash = await writeContractAsync({
+                address: NOTRUST_ADDRESS,
+                abi: NOTRUST_ABI,
+                functionName: 'claim',
+                args: [BigInt(campaign.on_chain_id), data.signature as `0x${string}`]
+            });
+            
+            updateStep('submit', 'done', `tx ${txHash.slice(0,6)}...`);
+            
+            if (publicClient) {
+                await publicClient.waitForTransactionReceipt({ hash: txHash });
+            }
 
-        // Step 5
-        updateStep('submit', 'active');
-        await new Promise(r => setTimeout(r, 2000));
-        updateStep('submit', 'done', 'SENT');
+            setClaimTx(txHash);
+            setClaimState('success');
+            toast.success(`${campaign.reward_per_user} ${campaign.token_symbol} claimed successfully!`);
+            
+            confetti({
+                particleCount: 200,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#6366f1', '#eab308', '#ffffff']
+            });
 
-        setClaimState('success');
-        toast.success('Reward claimed successfully!');
+        } catch (err: any) {
+            console.error(err);
+            toast.error(err.message || 'Claim failed');
+            setClaimState('idle');
+        }
     };
 
-    if (!campaignId) return null;
+    const container = { animate: { transition: { staggerChildren: 0.12 } } };
+    const stepAnim = { initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0 } };
 
     return (
         <div className="fixed inset-0 z-[100] flex justify-end">
-            {/* Backdrop */}
             <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={onBack}
                 className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
 
-            {/* Panel */}
             <motion.div
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                initial={{ x: 40, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: '100%', opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
                 className="relative w-full max-w-xl h-full bg-[#050505] border-l border-white/5 shadow-2xl overflow-y-auto no-scrollbar"
             >
-                {loading ? (
-                    <div className="p-8 space-y-8 h-full flex flex-col items-center justify-center">
-                        <div className="w-12 h-12 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                <div className="p-8 space-y-8">
+                    {/* Header */}
+                    <div className="flex justify-between items-start">
+                        <button onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-white transition-colors">
+                            <span className="text-xl">←</span> <span className="text-sm font-bold uppercase tracking-widest">Back</span>
+                        </button>
                     </div>
-                ) : campaign && (
-                    <div className="p-8 space-y-8">
-                        {/* Header */}
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl font-bold shadow-lg shadow-indigo-500/20">
-                                    {campaign.currency.charAt(0)}
-                                </div>
-                                <div>
-                                    <div className="text-sm font-bold text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded inline-block mb-1">
-                                        {campaign.partner_name}
-                                    </div>
-                                    <h2 className="text-3xl font-medium text-white tracking-tight">{campaign.reward_amount} {campaign.currency}</h2>
-                                </div>
+
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl font-bold shadow-lg shadow-indigo-500/20">
+                            {campaign.token_symbol.charAt(0)}
+                        </div>
+                        <div>
+                            <h2 className="text-4xl font-medium tracking-tight text-white">{campaign.reward_per_user} <span className="text-sm text-gray-400">{campaign.token_symbol}</span></h2>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-xl font-semibold text-white mb-2">{campaign.title}</h3>
+                        <p className="text-sm text-gray-300 leading-relaxed mb-4">{campaign.description}</p>
+                        
+                        <div className="flex flex-col gap-2 font-mono text-xs text-gray-400">
+                            <div className="flex items-center gap-1.5">
+                                <Database className="w-3.5 h-3.5" />
+                                <span>Creator: {campaign.creator_address}</span>
+                                <ExternalLink className="w-3 h-3 cursor-pointer hover:text-indigo-400" />
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="p-2 border border-white/10 rounded-full hover:bg-white/5 transition-colors text-gray-500 hover:text-white"
-                            >
-                                <X className="w-5 h-5" />
+                            <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{timeLeft}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="text-sm text-gray-300 font-medium">
+                        {campaign.current_claims} of {campaign.max_claims} claimed · {Number(campaign.pool_amount) - (Number(campaign.current_claims) * Number(campaign.reward_per_user))} {campaign.token_symbol} remaining in pool
+                    </div>
+
+                    {/* Already Claimed State */}
+                    {alreadyClaimed && (
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-center">
+                            <h3 className="text-lg font-medium text-white mb-1">You already claimed this reward</h3>
+                            <button className="text-xs font-bold text-indigo-400 flex items-center gap-1 justify-center mx-auto hover:text-indigo-300 transition-colors">
+                                View transaction <ExternalLink className="w-3 h-3" />
                             </button>
                         </div>
+                    )}
 
-                        {/* Description */}
-                        <div>
-                            <h3 className="text-xl font-semibold text-white mb-2">{campaign.title}</h3>
-                            <p className="text-gray-400 leading-relaxed">{campaign.description}</p>
-                            
-                            <div className="mt-4 flex items-center gap-4 text-xs font-mono text-gray-500">
-                                <div className="flex items-center gap-1.5">
-                                    <Database className="w-3.5 h-3.5" />
-                                    <span>Creator: 0x833589...2913</span>
-                                    <ExternalLink className="w-3 h-3 cursor-pointer hover:text-indigo-400" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
-                                <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Total Pool</div>
-                                <div className="text-xl font-medium text-white">5,000 {campaign.currency}</div>
-                            </div>
-                            <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
-                                <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-1">Claimed</div>
-                                <div className="text-xl font-medium text-white">{campaign.claims_count} of {campaign.max_claims}</div>
-                            </div>
-                        </div>
-
-                        {/* Qualification Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                                <h4 className="text-sm font-bold uppercase tracking-widest text-white">How to qualify</h4>
-                            </div>
-                            
-                            <div className="bg-[#0A0A0B] border border-white/5 rounded-2xl p-6 space-y-4">
-                                <div className="flex items-start gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-indigo-500/10 flex items-center justify-center shrink-0">
-                                        <Box className="w-5 h-5 text-indigo-400" />
+                    {/* Criteria & Claim */}
+                    {!alreadyClaimed && (
+                        <>
+                            {/* Criteria Card */}
+                            <div className="bg-[#13141A] border border-white/5 rounded-2xl p-6 space-y-4">
+                                <h4 className="text-[11px] uppercase tracking-[0.15em] text-gray-500 font-bold mb-4">How to qualify</h4>
+                                <p className="text-sm text-gray-300">
+                                    {campaign.criteria_type === 'token_balance' ? `Hold at least ${campaign.criteria_value} ${campaign.token_symbol} on Base` :
+                                     campaign.criteria_type === 'nft_hold' ? `Own at least ${campaign.criteria_value} NFT(s) from collection` :
+                                     `Satisfy the custom on-chain requirement`}
+                                </p>
+                                
+                                <details className="group">
+                                    <summary className="text-xs font-bold text-indigo-400 cursor-pointer list-none">View Technical Details</summary>
+                                    <div className="mt-4 p-4 bg-black/40 rounded-xl font-mono text-xs text-gray-400 space-y-2">
+                                        <div className="flex justify-between"><span>Contract:</span> <span className="text-white">{campaign.criteria_target}</span></div>
+                                        <div className="flex justify-between"><span>Method:</span> <span className="text-white">balanceOf(address)</span></div>
+                                        <div className="flex justify-between"><span>Operator:</span> <span className="text-white">≥</span></div>
+                                        <div className="flex justify-between"><span>Value:</span> <span className="text-white">{campaign.criteria_value} (raw)</span></div>
                                     </div>
-                                    <div>
-                                        <div className="text-white font-medium">Token Balance Threshold</div>
-                                        <div className="text-sm text-gray-500 mt-1">You must hold &ge; 1,000 USDC on Base at time of claim.</div>
+                                </details>
+
+                                {!eligibilityChecked ? (
+                                    <button
+                                        onClick={handleCheckEligibility}
+                                        className="w-full mt-4 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all border border-white/5 hover:border-white/10"
+                                    >
+                                        Check My Eligibility
+                                    </button>
+                                ) : (
+                                    <div className="mt-4 text-green-400 font-bold flex items-center gap-2">
+                                        <CheckCircle className="w-5 h-5" /> You qualify — ready to claim
                                     </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-white/5 space-y-2">
-                                    <TechRow label="Contract" value="0x833589...2913" link />
-                                    <TechRow label="Method" value="balanceOf(address)" />
-                                    <TechRow label="Condition" value="result &ge; 1000000" />
-                                    <TechRow label="Evaluation" value="Trustlessly, On-chain" />
-                                </div>
+                                )}
                             </div>
-                        </div>
 
-                        {/* Claim Flow */}
-                        <div className="space-y-4">
-                            {claimState === 'idle' ? (
+                            {/* Claim Flow */}
+                            {eligibilityChecked && claimState === 'idle' && (
                                 <button
-                                    onClick={handleCheckEligibility}
-                                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-indigo-600/20 active:scale-[0.98]"
+                                    onClick={handleClaim}
+                                    className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg active:scale-[0.98]"
                                 >
-                                    Check My Eligibility
+                                    Claim {campaign.reward_per_user} {campaign.token_symbol} Now
                                 </button>
-                            ) : (
-                                <div className="bg-white/5 border border-indigo-500/20 rounded-2xl p-6 space-y-6">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                                        <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Real-time Verification</span>
-                                    </div>
+                            )}
 
-                                    <div className="space-y-4">
+                            {claimState !== 'idle' && (
+                                <div className="bg-[#13141A] border border-indigo-500/20 rounded-2xl p-6 space-y-6">
+                                    <motion.div variants={container} initial="initial" animate="animate" className="space-y-4">
                                         {steps.map((step, i) => (
-                                            <div key={step.id} className={cn(
-                                                "flex items-center justify-between transition-all duration-300",
+                                            <motion.div key={step.id} variants={stepAnim} className={cn(
+                                                "flex items-center justify-between transition-opacity duration-300",
                                                 step.status === 'pending' ? "opacity-30" : "opacity-100"
                                             )}>
                                                 <div className="flex items-center gap-3">
@@ -220,59 +302,41 @@ export function CampaignDetail({ campaignId, onClose }: CampaignDetailProps) {
                                                     )}>
                                                         {step.status === 'done' ? <CheckCircle className="w-3 h-3" /> : i + 1}
                                                     </div>
-                                                    <span className={cn(
-                                                        "text-sm font-medium",
-                                                        step.status === 'done' ? "text-white" :
-                                                        step.status === 'active' ? "text-indigo-400" : "text-gray-500"
-                                                    )}>
+                                                    <span className="text-sm text-gray-300">
                                                         {step.text}
                                                     </span>
                                                 </div>
-                                                {step.value && (
-                                                    <span className="text-[10px] font-mono text-gray-500 bg-white/5 px-1.5 py-0.5 rounded">
-                                                        {step.value}
-                                                    </span>
-                                                )}
-                                            </div>
+                                                {step.value && <span className="font-mono text-xs text-gray-500">{step.value}</span>}
+                                            </motion.div>
                                         ))}
-                                    </div>
+                                    </motion.div>
 
                                     {claimState === 'success' && (
                                         <motion.div
-                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            initial={{ opacity: 0, scale: 0.95 }}
                                             animate={{ opacity: 1, scale: 1 }}
-                                            className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex flex-col items-center gap-3"
+                                            className="bg-green-500/20 border border-green-500/30 rounded-xl p-4 flex flex-col items-center gap-2"
                                         >
-                                            <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
-                                                <CheckCircle className="w-6 h-6 text-white" />
+                                            <div className="flex items-center gap-2 text-green-400 font-bold mb-1">
+                                                <CheckCircle className="w-5 h-5" />
+                                                {campaign.reward_per_user} {campaign.token_symbol} secured
                                             </div>
-                                            <div className="text-center">
-                                                <div className="text-white font-bold">Reward Claimed!</div>
-                                                <div className="text-xs text-green-400 mt-1">Check your wallet on Base</div>
-                                            </div>
-                                            <button className="text-xs font-bold text-white flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
-                                                View Tx on Basescan <ExternalLink className="w-3 h-3" />
-                                            </button>
+                                            <a 
+                                                href={`https://basescan.org/tx/${claimTx}`} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                className="text-xs text-white/80 hover:text-white flex items-center gap-1"
+                                            >
+                                                Transaction: {claimTx.slice(0,6)}...{claimTx.slice(-4)} <ExternalLink className="w-3 h-3" />
+                                            </a>
                                         </motion.div>
                                     )}
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
+                        </>
+                    )}
+                </div>
             </motion.div>
-        </div>
-    );
-}
-
-function TechRow({ label, value, link }: { label: string, value: string, link?: boolean }) {
-    return (
-        <div className="flex items-center justify-between font-mono text-[10px]">
-            <span className="text-gray-600">{label}:</span>
-            <div className="flex items-center gap-1">
-                <span className="text-gray-400">{value}</span>
-                {link && <ExternalLink className="w-2.5 h-2.5 text-gray-600 hover:text-indigo-400 cursor-pointer" />}
-            </div>
         </div>
     );
 }

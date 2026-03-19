@@ -1,108 +1,115 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Campaign } from '@/app/api/campaigns/route';
 
 interface CampaignCardProps {
-    campaign: {
-        id: number;
-        title: string;
-        partner_name: string;
-        reward_amount: string;
-        currency: string;
-        description: string;
-        token_address?: string;
-        max_claims: number;
-        claims_count: number;
-        expiry_date?: string;
-        criteria_type?: 'token_balance' | 'nft_hold' | 'contract_call';
-    };
-    onClick: (id: number) => void;
+    campaign: Campaign;
+    onClick: () => void;
 }
 
 export function CampaignCard({ campaign, onClick }: CampaignCardProps) {
-    const progress = (campaign.claims_count / campaign.max_claims) * 100;
-    
-    // Default criteria type if not provided
-    const criteria = campaign.criteria_type || 'token_balance';
+    const borderColor = 
+        campaign.criteria_type === 'token_balance' ? 'border-l-blue-500' :
+        campaign.criteria_type === 'nft_hold' ? 'border-l-purple-500' :
+        'border-l-teal-500';
 
-    const borderColors = {
-        token_balance: 'border-l-blue-500',
-        nft_hold: 'border-l-purple-500',
-        contract_call: 'border-l-teal-500',
-    };
+    const bgColor = 
+        campaign.criteria_type === 'token_balance' ? 'bg-blue-500/10' :
+        campaign.criteria_type === 'nft_hold' ? 'bg-purple-500/10' :
+        'bg-teal-500/10';
+
+    const progress = campaign.max_claims > 0 
+        ? Math.min((campaign.current_claims / campaign.max_claims) * 100, 100) 
+        : 0;
 
     return (
         <motion.div
             whileHover={{ scale: 1.01, y: -2 }}
-            onClick={() => onClick(campaign.id)}
+            transition={{ duration: 0.15 }}
+            onClick={onClick}
             className={cn(
-                "group relative bg-[#0A0A0B] border border-white/5 border-l-4 rounded-xl p-5 cursor-pointer transition-all duration-300",
-                "hover:border-indigo-500/30 hover:shadow-[0_0_30px_rgba(99,102,241,0.15)]",
-                borderColors[criteria]
+                "group relative bg-[#13141A] hover:bg-[#1A1B23] border border-white/5 rounded-2xl p-5 cursor-pointer overflow-hidden transition-all",
+                "border-l-[3px]",
+                borderColor,
+                "hover:border-indigo-500/50 hover:shadow-[0_10px_40px_-10px_rgba(99,102,241,0.2)]"
             )}
         >
-            <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
-                        {/* If we had a real logo URL, we'd use it here */}
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 opacity-20" />
-                        <span className="absolute text-xs font-bold text-white/50">{campaign.currency.charAt(0)}</span>
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] uppercase font-bold tracking-widest text-gray-500">{campaign.partner_name}</span>
-                        </div>
-                        <div className="text-2xl font-medium text-white tracking-tight">
-                            {campaign.reward_amount} <span className="text-gray-500 text-sm font-normal">{campaign.currency}</span>
-                        </div>
-                    </div>
+            <div className="flex justify-between items-start mb-6">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold shadow-lg">
+                    {campaign.token_symbol.charAt(0)}
                 </div>
-                
-                <div className="bg-white/5 p-1.5 rounded-lg text-gray-400 group-hover:text-indigo-400 group-hover:bg-indigo-500/10 transition-all">
-                    <ArrowRight className="w-4 h-4" />
+                <div className={cn(
+                    "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-white",
+                    bgColor
+                )}>
+                    {campaign.criteria_type.replace('_', ' ')}
                 </div>
             </div>
 
-            <h3 className="text-lg font-semibold text-white mb-2 line-clamp-1 group-hover:text-indigo-100 transition-colors">
-                {campaign.title}
-            </h3>
-            
-            <p className="text-sm text-gray-400 mb-6 line-clamp-2 leading-relaxed">
-                {campaign.description}
-            </p>
-
-            {/* Progress Bar */}
-            <div className="space-y-2 mb-6">
-                <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider">
-                    <span className="text-gray-500">Claim Progress</span>
-                    <span className="text-white">{campaign.claims_count} / {campaign.max_claims} <span className="text-gray-500">Claimed</span></span>
+            <div className="space-y-1 mb-6">
+                <div className="text-2xl font-medium text-white tracking-tight flex items-baseline gap-1.5">
+                    {campaign.reward_per_user} <span className="text-sm text-gray-400">{campaign.token_symbol}</span>
                 </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                    <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className="h-full bg-gradient-to-r from-indigo-600 to-blue-500 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+                <h3 className="text-lg font-semibold text-white leading-tight line-clamp-1">{campaign.title}</h3>
+            </div>
+
+            <div className="space-y-2 mb-6">
+                <div className="flex justify-between text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                    <span>{campaign.current_claims} claimed</span>
+                    <span>{campaign.max_claims} total</span>
+                </div>
+                <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden">
+                    <div 
+                        className="h-full bg-white rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${progress}%` }}
                     />
                 </div>
             </div>
 
-            <div className="flex items-center justify-between">
-                <div className="flex gap-2">
-                    <span className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                        {criteria.replace('_', ' ')}
-                    </span>
-                    <span className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> 5 days left
-                    </span>
+            <div className="flex justify-between items-end border-t border-white/5 pt-4">
+                <div className="space-y-1">
+                    <div className="flex gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-widest bg-white/5 text-gray-400 px-1.5 py-0.5 rounded">
+                            Verified
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest bg-white/5 text-gray-400 px-1.5 py-0.5 rounded">
+                            Trustless
+                        </span>
+                    </div>
+                    <TimeRemaining endsAt={campaign.ends_at} />
                 </div>
                 
-                <div className="text-xs font-bold text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                    Claim Reward <ExternalLink className="w-3 h-3" />
+                <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:border-indigo-500 group-hover:text-white transition-all text-gray-500">
+                    <ArrowUpRight className="w-4 h-4" />
                 </div>
             </div>
         </motion.div>
+    );
+}
+
+function TimeRemaining({ endsAt }: { endsAt: string }) {
+    if (!endsAt) return null;
+    
+    // Quick calculation for display
+    const diff = new Date(endsAt).getTime() - new Date().getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    
+    let color = 'text-gray-500';
+    let text = `${Math.floor(hours / 24)} days left`;
+    
+    if (hours < 24) {
+        color = 'text-red-400';
+        text = `${hours} hours left`;
+    } else if (hours < 72) {
+        color = 'text-amber-400';
+    }
+    
+    return (
+        <div className={cn("text-xs font-medium", color)}>
+            {diff > 0 ? text : 'Ended'}
+        </div>
     );
 }

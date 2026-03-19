@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import {
     ConnectWallet,
     Wallet,
@@ -26,11 +28,27 @@ interface NavbarProps {
 export function Navbar({ activeView, onViewChange }: NavbarProps) {
     const { isConnected } = useAccount();
     const chainId = useChainId();
+    const [scrolled, setScrolled] = useState(false);
 
     const isBase = chainId === base.id || chainId === baseSepolia.id;
 
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-b border-white/5 bg-black/40 backdrop-blur-xl transition-all">
+        <motion.nav 
+            initial={{ y: -20, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }}
+            className={cn(
+                "fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 transition-all duration-300",
+                scrolled ? "backdrop-blur-xl bg-black/60 border-b border-white/5" : "bg-transparent border-b border-white/0"
+            )}
+        >
             {/* Left: Logo */}
             <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 group cursor-pointer" onClick={() => onViewChange?.('discover')}>
@@ -43,8 +61,10 @@ export function Navbar({ activeView, onViewChange }: NavbarProps) {
                     <div className="flex flex-col">
                         <span className="font-bold text-lg tracking-tight leading-none text-white">No-Trust</span>
                         <div className="flex items-center gap-1 mt-0.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">on Base</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)] flex items-center justify-center">
+                                <span className="text-[4px] font-bold text-white invisible sm:visible">B</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest bg-blue-500/10 px-1 rounded">on Base</span>
                         </div>
                     </div>
                 </div>
@@ -72,10 +92,13 @@ export function Navbar({ activeView, onViewChange }: NavbarProps) {
 
             {/* Right: Wallet & Network */}
             <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 bg-white/5 border border-white/5 px-3 py-1.5 rounded-full">
+                <div className={cn(
+                    "hidden sm:flex items-center gap-2 border px-3 py-1.5 rounded-full transition-colors",
+                    isBase ? "bg-green-500/10 border-green-500/20" : "bg-yellow-500/10 border-yellow-500/20"
+                )}>
                     <div className={cn("w-2 h-2 rounded-full", isBase ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-yellow-500 animate-pulse")} />
-                    <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
-                        {isBase ? 'Base' : 'Wrong Network'}
+                    <span className={cn("text-[11px] font-bold uppercase tracking-wider", isBase ? "text-green-400" : "text-yellow-400")}>
+                        {isBase ? 'Base Mainnet' : 'Wrong Network'}
                     </span>
                 </div>
 
@@ -103,6 +126,6 @@ export function Navbar({ activeView, onViewChange }: NavbarProps) {
                     </WalletDropdown>
                 </Wallet>
             </div>
-        </nav>
+        </motion.nav>
     );
 }

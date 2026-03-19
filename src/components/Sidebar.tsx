@@ -1,130 +1,149 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, BarChart3, Users, Zap, CheckCircle2 } from 'lucide-react';
+import { Compass, Zap, Activity } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { StatsResponse } from '@/app/api/stats/route';
+import { ActivityResponse, ActivityEvent } from '@/app/api/activity/route';
 
-interface Stats {
-    activeCampaigns: number;
-    totalLocked: number;
-    claimsToday: number;
-    successRate: number;
+interface SidebarProps {
+    activeView: string;
+    onNavigate: (view: string) => void;
 }
 
-interface ActivityEvent {
-    id: string;
-    address: string;
-    amount: string;
-    token: string;
-    time: string;
-    timestamp: number;
-}
-
-export function Sidebar() {
-    const [stats, setStats] = useState<Stats>({
-        activeCampaigns: 12,
-        totalLocked: 24500,
-        claimsToday: 142,
-        successRate: 99.8
-    });
-
-    const [activities, setActivities] = useState<ActivityEvent[]>([
-        { id: '1', address: '0x1234...abcd', amount: '50', token: 'USDC', time: '2m ago', timestamp: Date.now() - 120000 },
-        { id: '2', address: '0xabcd...5678', amount: '500', token: 'DEGEN', time: '5m ago', timestamp: Date.now() - 300000 },
-        { id: '3', address: '0x7890...efgh', amount: '0.05', token: 'ETH', time: '8m ago', timestamp: Date.now() - 480000 },
-    ]);
+export function Sidebar({ activeView, onNavigate }: SidebarProps) {
+    const [stats, setStats] = useState<StatsResponse | null>(null);
+    const [activities, setActivities] = useState<ActivityEvent[]>([]);
 
     useEffect(() => {
-        // Fetch real stats from Supabase
         const fetchStats = async () => {
-            const { data: campaigns } = await supabase.from('campaigns').select('id').eq('status', 'active');
-            const { data: claimsToday } = await supabase.from('claims')
-                .select('id')
-                .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString());
-
-            if (campaigns) {
-                setStats(prev => ({ ...prev, activeCampaigns: campaigns.length }));
-            }
-            if (claimsToday) {
-                setStats(prev => ({ ...prev, claimsToday: claimsToday.length }));
-            }
+            try {
+                const res = await fetch('/api/stats');
+                if (res.ok) {
+                    setStats(await res.json());
+                }
+            } catch (err) {}
         };
-
         fetchStats();
-
-        // Simulate live activity refreshing (in a real app, this would be a Supabase subscription)
-        const interval = setInterval(() => {
-            // Optional: fetch real latest claims
-        }, 10000);
-
+        const interval = setInterval(fetchStats, 30000); // 30s
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        const fetchActivity = async () => {
+            try {
+                const res = await fetch('/api/activity');
+                if (res.ok) {
+                    const data: ActivityResponse = await res.json();
+                    if (data.events) {
+                        setActivities(data.events);
+                    }
+                }
+            } catch (err) {}
+        };
+        fetchActivity();
+        const interval = setInterval(fetchActivity, 10000); // 10s
+        return () => clearInterval(interval);
+    }, []);
+
+    const navItems = [
+        { id: 'discover', label: 'Discover', icon: <Compass className="w-5 h-5" /> },
+        { id: 'distribute', label: 'Distribute', icon: <Zap className="w-5 h-5" /> },
+        { id: 'activity', label: 'My Activity', icon: <Activity className="w-5 h-5" /> }
+    ];
+
     return (
-        <aside className="hidden md:flex flex-col w-60 h-[calc(100vh-4rem)] fixed left-0 top-16 border-r border-white/5 bg-black/20 backdrop-blur-sm p-6 overflow-y-auto no-scrollbar">
-            {/* Stats Section */}
-            <div className="space-y-6 mb-10">
-                <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="w-4 h-4 text-indigo-400" />
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]">Platform Stats</span>
+        <aside className="hidden md:flex flex-col w-60 h-full border-r border-white/5 bg-black/40 backdrop-blur-3xl sticky top-16 left-0">
+            <div className="flex-1 overflow-y-auto no-scrollbar py-8 px-4 space-y-8">
+                {/* Navigation */}
+                <nav className="space-y-2">
+                    {navItems.map((item) => (
+                        <button
+                            key={item.id}
+                            onClick={() => onNavigate(item.id)}
+                            className={cn(
+                                "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all",
+                                activeView === item.id 
+                                    ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.05)]" 
+                                    : "text-gray-500 hover:text-white hover:bg-white/5"
+                            )}
+                        >
+                            {item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className="h-px bg-white/5" />
+
+                {/* Stats */}
+                <div className="space-y-4 px-2">
+                    <h3 className="text-[11px] uppercase tracking-[0.15em] text-gray-500 font-bold">Platform Stats</h3>
+                    <div className="space-y-4">
+                        <StatItem label="Active Campaigns" value={stats?.activeCampaigns.toString() || '0'} />
+                        <StatItem label="Total Locked" value={`$${(stats?.totalLocked || 0).toLocaleString()}`} />
+                        <StatItem label="Claims Today" value={stats?.claimsToday.toString() || '0'} />
+                        <StatItem label="Success Rate" value={`${stats?.successRate || 100}%`} />
+                    </div>
                 </div>
 
-                <div className="grid gap-4">
-                    <StatItem label="Active Campaigns" value={stats.activeCampaigns} icon={<Zap className="w-3 h-3" />} />
-                    <StatItem label="Total Locked" value={`$${stats.totalLocked.toLocaleString()}`} icon={<Users className="w-3 h-3" />} />
-                    <StatItem label="Claims Today" value={stats.claimsToday} icon={<CheckCircle2 className="w-3 h-3" />} />
-                    <StatItem label="Success Rate" value={`${stats.successRate}%`} icon={<Activity className="w-3 h-3" />} />
-                </div>
-            </div>
+                <div className="h-px bg-white/5" />
 
-            {/* Live Activity Feed */}
-            <div className="flex flex-col flex-1">
-                <div className="flex items-center gap-2 mb-4">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]">Live Activity</span>
-                </div>
-
-                <div className="space-y-3">
-                    <AnimatePresence initial={false}>
-                        {activities.map((event) => (
-                            <motion.div
-                                key={event.id}
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors group"
-                            >
-                                <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500/50 group-hover:bg-green-500 transition-colors" />
-                                    <span className="text-xs font-mono text-gray-300">{event.address}</span>
-                                </div>
-                                <div className="flex justify-between items-end">
-                                    <span className="text-[13px] font-bold text-white">
-                                        {event.amount} <span className="text-gray-500 font-medium">{event.token}</span>
-                                    </span>
-                                    <span className="text-[10px] text-gray-500 font-medium">{event.time}</span>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </AnimatePresence>
+                {/* Live Activity */}
+                <div className="space-y-4 px-2">
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <h3 className="text-[11px] uppercase tracking-[0.15em] text-gray-500 font-bold">Live Activity</h3>
+                    </div>
+                    <div className="space-y-4">
+                        <AnimatePresence initial={false}>
+                            {activities.map((event, i) => (
+                                <motion.div
+                                    key={`${event.user_address}-${event.created_at}-${i}`}
+                                    initial={{ opacity: 0, x: -20, height: 0 }}
+                                    animate={{ opacity: 1, x: 0, height: 'auto' }}
+                                    exit={{ opacity: 0, scale: 0.9, height: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="flex items-start gap-3"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                        <div className="w-4 h-4 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm text-gray-300 leading-tight">
+                                            <span className="font-mono text-xs text-indigo-400">0x{event.user_address.slice(2,6)}...{event.user_address.slice(-4)}</span>
+                                            {' '}claimed <span className="text-white font-medium">{event.reward_per_user} {event.token_symbol}</span>
+                                        </div>
+                                        <div className="text-xs text-gray-600 mt-1">
+                                            {getTimeAgo(event.created_at)}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                        {activities.length === 0 && (
+                            <div className="text-xs text-gray-600 italic">Listening for events...</div>
+                        )}
+                    </div>
                 </div>
             </div>
         </aside>
     );
 }
 
-function StatItem({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
+function StatItem({ label, value }: { label: string; value: string }) {
     return (
-        <div className="group">
-            <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                {icon}
-                {label}
-            </div>
-            <div className="text-xl font-medium text-white tracking-tight group-hover:text-indigo-400 transition-colors">
-                {value}
-            </div>
+        <div className="flex justify-between items-center group cursor-default">
+            <span className="text-xs text-gray-500 group-hover:text-gray-400 transition-colors">{label}</span>
+            <span className="text-sm font-mono text-white group-hover:text-indigo-400 transition-colors">{value}</span>
         </div>
     );
+}
+
+function getTimeAgo(dateString: string) {
+    const diff = Math.floor((new Date().getTime() - new Date(dateString).getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    return `${Math.floor(diff/3600)}h ago`;
 }
