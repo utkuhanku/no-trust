@@ -19,8 +19,8 @@ import { useAccount, useChainId } from 'wagmi';
 import { base, baseSepolia } from 'wagmi/chains';
 
 interface NavbarProps {
-    activeView: string;
-    onViewChange: (view: string) => void;
+    activeView?: string;
+    onViewChange?: (view: string) => void;
 }
 
 export function Navbar({ activeView, onViewChange }: NavbarProps) {
@@ -33,7 +33,7 @@ export function Navbar({ activeView, onViewChange }: NavbarProps) {
         <nav className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 border-b border-white/5 bg-black/40 backdrop-blur-xl transition-all">
             {/* Left: Logo */}
             <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 group cursor-pointer" onClick={() => onViewChange('discover')}>
+                <div className="flex items-center gap-2 group cursor-pointer" onClick={() => onViewChange?.('discover')}>
                     <div className="relative w-8 h-8 flex items-center justify-center">
                         <div className="absolute inset-0 bg-indigo-600 rounded-full blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
                         <div className="relative w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 p-1.5 flex items-center justify-center">
@@ -51,22 +51,24 @@ export function Navbar({ activeView, onViewChange }: NavbarProps) {
             </div>
 
             {/* Center: Navigation */}
-            <div className="hidden md:flex items-center gap-1 bg-white/5 border border-white/5 rounded-full p-1">
-                {['discover', 'distribute', 'activity'].map((view) => (
-                    <button
-                        key={view}
-                        onClick={() => onViewChange(view)}
-                        className={cn(
-                            "px-5 py-1.5 text-xs font-semibold rounded-full transition-all capitalize",
-                            activeView === view
-                                ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-                                : "text-gray-400 hover:text-white"
-                        )}
-                    >
-                        {view === 'activity' ? 'My Activity' : view}
-                    </button>
-                ))}
-            </div>
+            {onViewChange && (
+                <div className="hidden md:flex items-center gap-1 bg-white/5 border border-white/5 rounded-full p-1">
+                    {['discover', 'distribute', 'activity'].map((view) => (
+                        <button
+                            key={view}
+                            onClick={() => onViewChange(view)}
+                            className={cn(
+                                "px-5 py-1.5 text-xs font-semibold rounded-full transition-all capitalize",
+                                activeView === view
+                                    ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                                    : "text-gray-400 hover:text-white"
+                            )}
+                        >
+                            {view === 'activity' ? 'My Activity' : view}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Right: Wallet & Network */}
             <div className="flex items-center gap-4">
